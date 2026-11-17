@@ -1,6 +1,8 @@
 # dependencies (bun install)
 node_modules
 
+#build
+dist/weather
 # output
 out
 dist
