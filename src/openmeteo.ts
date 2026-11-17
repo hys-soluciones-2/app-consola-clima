@@ -21,6 +21,20 @@ export type CurrentWeather = {
   observedAt: string;
 };
 
+export type ForecastDay = {
+  date: string;
+  maxTemperature: number;
+  minTemperature: number;
+  weatherCode: number;
+  precipitationProbability: number | null;
+};
+
+export type WeeklyForecast = {
+  days: ForecastDay[];
+  temperatureUnit: string;
+  precipitationUnit: string;
+};
+
 type GeocodingResult = {
   id?: number;
   name: string;
@@ -43,6 +57,17 @@ type ForecastResponse = {
     relative_humidity_2m?: number;
     weather_code?: number;
     wind_speed_10m?: number;
+  };
+};
+
+type DailyForecastResponse = {
+  daily_units?: Record<string, string>;
+  daily?: {
+    time?: string[];
+    temperature_2m_max?: number[];
+    temperature_2m_min?: number[];
+    weather_code?: number[];
+    precipitation_probability_max?: number[];
   };
 };
 
@@ -130,5 +155,54 @@ export async function fetchCurrentWeather(city: City, unit: Unit): Promise<Curre
     windUnit: units.wind_speed_10m ?? (unit === "fahrenheit" ? "mp/h" : "km/h"),
     humidityUnit: units.relative_humidity_2m ?? "%",
     observedAt: current.time ?? "",
+  };
+}
+
+/** Paso 2 (variante): pronóstico diario para los próximos 7 días. */
+export async function fetchWeeklyForecast(city: City, unit: Unit): Promise<WeeklyForecast> {
+  const url = new URL(FORECAST_URL);
+  url.searchParams.set("latitude", String(city.latitude));
+  url.searchParams.set("longitude", String(city.longitude));
+  url.searchParams.set(
+    "daily",
+    "temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max",
+  );
+  url.searchParams.set("forecast_days", "7");
+  url.searchParams.set("timezone", "auto");
+  if (unit === "fahrenheit") {
+    url.searchParams.set("temperature_unit", "fahrenheit");
+    url.searchParams.set("wind_speed_unit", "mph");
+  }
+
+  const data = await requestJson<DailyForecastResponse>(url);
+  const daily = data.daily;
+  if (!daily || !Array.isArray(daily.time) || daily.time.length === 0) {
+    throw new WeatherError("Open-Meteo no devolvió el pronóstico diario");
+  }
+
+  const days: ForecastDay[] = [];
+  for (const [index, date] of daily.time.slice(0, 7).entries()) {
+    const maxTemperature = daily.temperature_2m_max?.[index];
+    const minTemperature = daily.temperature_2m_min?.[index];
+    if (typeof maxTemperature !== "number" || typeof minTemperature !== "number") continue;
+
+    days.push({
+      date,
+      maxTemperature,
+      minTemperature,
+      weatherCode: daily.weather_code?.[index] ?? 0,
+      precipitationProbability: daily.precipitation_probability_max?.[index] ?? null,
+    });
+  }
+
+  if (days.length === 0) {
+    throw new WeatherError("Open-Meteo no devolvió temperaturas para el pronóstico");
+  }
+
+  const units = data.daily_units ?? {};
+  return {
+    days,
+    temperatureUnit: units.temperature_2m_max ?? (unit === "fahrenheit" ? "°F" : "°C"),
+    precipitationUnit: units.precipitation_probability_max ?? "%",
   };
 }

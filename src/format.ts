@@ -1,5 +1,6 @@
+import { paint } from "./color.ts";
 import type { City, Unit } from "./config.ts";
-import type { CurrentWeather } from "./openmeteo.ts";
+import type { CurrentWeather, WeeklyForecast } from "./openmeteo.ts";
 
 /** Códigos WMO que devuelve Open-Meteo. */
 const WEATHER_CODES: Record<number, string> = {
@@ -62,8 +63,14 @@ export function formatObservedAt(iso: string): string {
 }
 
 export function formatCurrentWeather(weather: CurrentWeather): string {
-  const temperature = `${formatNumber(weather.temperature)} ${weather.temperatureUnit}`;
-  const feels = `${formatNumber(weather.apparentTemperature)} ${weather.temperatureUnit}`;
+  const temperature = paint(
+    `${formatNumber(weather.temperature)} ${weather.temperatureUnit}`,
+    "yellow",
+  );
+  const feels = paint(
+    `${formatNumber(weather.apparentTemperature)} ${weather.temperatureUnit}`,
+    "yellow",
+  );
   const details = [
     `Humedad ${Math.round(weather.humidity)}${weather.humidityUnit}`,
     `Viento ${formatNumber(weather.windSpeed)} ${weather.windUnit}`,
@@ -75,6 +82,38 @@ export function formatCurrentWeather(weather: CurrentWeather): string {
     `  ${temperature} (sensación ${feels}) · ${describeWeather(weather.weatherCode)}`,
     `  ${details.join(" · ")}`,
   ].join("\n");
+}
+
+const WEEKDAYS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"] as const;
+
+/** "2026-11-18" -> "mié 18/11" (se parsea como fecha local para no correr el día). */
+export function formatForecastDate(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!match) return iso;
+  const [, year, month, day] = match;
+  if (!year || !month || !day) return iso;
+
+  const weekday = WEEKDAYS[new Date(Number(year), Number(month) - 1, Number(day)).getDay()];
+  return `${weekday ? `${weekday} ` : ""}${day}/${month}`;
+}
+
+export function formatDailyForecast(forecast: WeeklyForecast): string {
+  if (forecast.days.length === 0) {
+    return `  ${paint("No hay pronóstico disponible.", "red")}`;
+  }
+
+  const lines = forecast.days.map((day) => {
+    const temperature = `${formatNumber(day.maxTemperature)} / ${formatNumber(day.minTemperature)} ${forecast.temperatureUnit}`;
+    const details = [describeWeather(day.weatherCode)];
+    if (day.precipitationProbability !== null) {
+      details.push(
+        `lluvia ${Math.round(day.precipitationProbability)}${forecast.precipitationUnit}`,
+      );
+    }
+    return `  ${formatForecastDate(day.date).padEnd(10)}${paint(temperature.padEnd(18), "yellow")}${details.join(" · ")}`;
+  });
+
+  return [`  ${paint("Pronóstico 7 días", "cyan")}`, ...lines].join("\n");
 }
 
 export function formatCityList(cities: City[], defaultCityId: string | null): string {

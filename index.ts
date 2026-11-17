@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { stdout } from "node:process";
+import { paint } from "./src/color.ts";
 import {
   addCity,
   findExistingCity,
@@ -11,9 +12,20 @@ import {
   toggleUnit,
 } from "./src/config.ts";
 import type { City, Config } from "./src/config.ts";
-import { formatCity, formatCityList, formatCurrentWeather, formatUnitLabel } from "./src/format.ts";
+import {
+  formatCity,
+  formatCityList,
+  formatCurrentWeather,
+  formatDailyForecast,
+  formatUnitLabel,
+} from "./src/format.ts";
 import { createPrompter, renderMenu } from "./src/menu.ts";
-import { fetchCurrentWeather, searchCities, WeatherError } from "./src/openmeteo.ts";
+import {
+  fetchCurrentWeather,
+  fetchWeeklyForecast,
+  searchCities,
+  WeatherError,
+} from "./src/openmeteo.ts";
 
 let config: Config;
 
@@ -26,19 +38,27 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function success(message: string): void {
+  stdout.write(`  ${paint(message, "green")}\n`);
+}
+
+function fail(message: string): void {
+  stdout.write(`  ${paint(message, "red")}\n`);
+}
+
 async function persist(): Promise<void> {
   try {
     await saveConfig(config);
   } catch (error) {
-    stdout.write(`  No se pudo guardar la configuración: ${messageOf(error)}\n`);
+    fail(`No se pudo guardar la configuración: ${messageOf(error)}`);
   }
 }
 
 function reportError(error: unknown): void {
   if (error instanceof WeatherError) {
-    stdout.write(`  ${error.message}\n`);
+    fail(error.message);
   } else {
-    stdout.write(`  Error inesperado: ${messageOf(error)}\n`);
+    fail(`Error inesperado: ${messageOf(error)}`);
   }
 }
 
@@ -52,10 +72,20 @@ async function showWeather(city: City): Promise<void> {
   }
 }
 
+async function showForecast(city: City): Promise<void> {
+  stdout.write(`\n${formatCity(city)}\n`);
+  try {
+    const forecast = await fetchWeeklyForecast(city, config.unit);
+    stdout.write(`${formatDailyForecast(forecast)}\n`);
+  } catch (error) {
+    reportError(error);
+  }
+}
+
 async function showDefaultCityWeather(): Promise<void> {
   const city = getDefaultCity(config);
   if (!city) {
-    stdout.write("  No hay ciudad default. Agrega una con la opción 3.\n");
+    fail("No hay ciudad default. Agrega una con la opción 3.");
     return;
   }
   await showWeather(city);
@@ -63,7 +93,7 @@ async function showDefaultCityWeather(): Promise<void> {
 
 async function showAllCitiesWeather(): Promise<void> {
   if (config.cities.length === 0) {
-    stdout.write("  Todavía no tienes ciudades guardadas. Usa la opción 3.\n");
+    fail("Todavía no tienes ciudades guardadas. Usa la opción 3.");
     return;
   }
   for (const city of config.cities) {
@@ -71,11 +101,21 @@ async function showAllCitiesWeather(): Promise<void> {
   }
 }
 
+async function showAllForecasts(): Promise<void> {
+  if (config.cities.length === 0) {
+    fail("Todavía no tienes ciudades guardadas. Usa la opción 3.");
+    return;
+  }
+  for (const city of config.cities) {
+    await showForecast(city);
+  }
+}
+
 async function addCityFlow(): Promise<void> {
   const query = await prompter.ask("  Nombre de la ciudad: ");
   if (query === null) return;
   if (query.length === 0) {
-    stdout.write("  No escribiste ningún nombre.\n");
+    fail("No escribiste ningún nombre.");
     return;
   }
 
@@ -88,7 +128,7 @@ async function addCityFlow(): Promise<void> {
   }
 
   if (results.length === 0) {
-    stdout.write(`  No se encontró ninguna ciudad llamada "${query}".\n`);
+    fail(`No se encontró ninguna ciudad llamada "${query}".`);
     return;
   }
 
@@ -102,32 +142,32 @@ async function addCityFlow(): Promise<void> {
 
   const index = Number(pick);
   if (!Number.isInteger(index) || index < 1 || index > results.length) {
-    stdout.write("  Opción inválida.\n");
+    fail("Opción inválida.");
     return;
   }
 
   const chosen = results[index - 1];
   if (!chosen) {
-    stdout.write("  Opción inválida.\n");
+    fail("Opción inválida.");
     return;
   }
 
   const existing = findExistingCity(config, chosen);
   if (existing) {
-    stdout.write(`  ${formatCity(existing)} ya está en tu lista.\n`);
+    fail(`${formatCity(existing)} ya está en tu lista.`);
     return;
   }
 
   const wasDefault = config.defaultCityId;
   config = addCity(config, chosen);
   await persist();
-  stdout.write(`  Agregada: ${formatCity(chosen)}\n`);
-  if (wasDefault === null) stdout.write("  Quedó como tu ciudad default.\n");
+  success(`Agregada: ${formatCity(chosen)}`);
+  if (wasDefault === null) success("Quedó como tu ciudad default.");
 }
 
 async function removeCityFlow(): Promise<void> {
   if (config.cities.length === 0) {
-    stdout.write("  Todavía no tienes ciudades guardadas.\n");
+    fail("Todavía no tienes ciudades guardadas.");
     return;
   }
 
@@ -137,27 +177,27 @@ async function removeCityFlow(): Promise<void> {
 
   const index = Number(pick);
   if (!Number.isInteger(index) || index < 1 || index > config.cities.length) {
-    stdout.write("  Opción inválida.\n");
+    fail("Opción inválida.");
     return;
   }
 
   const target = config.cities[index - 1];
   if (!target) {
-    stdout.write("  Opción inválida.\n");
+    fail("Opción inválida.");
     return;
   }
 
   config = removeCity(config, target.id);
   await persist();
-  stdout.write(`  Eliminada: ${formatCity(target)}\n`);
+  success(`Eliminada: ${formatCity(target)}`);
   if (config.defaultCityId === null) {
-    stdout.write("  Ya no tienes ciudad default.\n");
+    success("Ya no tienes ciudad default.");
   }
 }
 
 async function setDefaultCityFlow(): Promise<void> {
   if (config.cities.length === 0) {
-    stdout.write("  Todavía no tienes ciudades guardadas.\n");
+    fail("Todavía no tienes ciudades guardadas.");
     return;
   }
 
@@ -167,36 +207,36 @@ async function setDefaultCityFlow(): Promise<void> {
 
   const index = Number(pick);
   if (!Number.isInteger(index) || index < 1 || index > config.cities.length) {
-    stdout.write("  Opción inválida.\n");
+    fail("Opción inválida.");
     return;
   }
 
   const target = config.cities[index - 1];
   if (!target) {
-    stdout.write("  Opción inválida.\n");
+    fail("Opción inválida.");
     return;
   }
 
   config = setDefaultCity(config, target.id);
   await persist();
-  stdout.write(`  Ciudad default: ${formatCity(target)}\n`);
+  success(`Ciudad default: ${formatCity(target)}`);
 }
 
 async function toggleUnitFlow(): Promise<void> {
   config = toggleUnit(config);
   await persist();
-  stdout.write(`  Unidad establecida en ${formatUnitLabel(config.unit)}.\n`);
+  success(`Unidad establecida en ${formatUnitLabel(config.unit)}.`);
 }
 
 async function main(): Promise<void> {
   const loaded = await loadConfig();
   config = loaded.config;
   if (loaded.recovered) {
-    stdout.write("  No se pudo leer la configuración anterior; se creó una nueva.\n");
+    fail("No se pudo leer la configuración anterior; se creó una nueva.");
   }
 
   for (;;) {
-    stdout.write(`\n${renderMenu(config)}\n`);
+    stdout.write(`\n${paint(renderMenu(config), "cyan")}\n`);
     const choice = await prompter.ask("  Selecciona una opción: ");
 
     if (choice === null) break;
@@ -223,18 +263,21 @@ async function main(): Promise<void> {
       case "5":
         await setDefaultCityFlow();
         break;
+      case "6":
+        await showAllForecasts();
+        break;
       case "8":
         await toggleUnitFlow();
         break;
       default:
-        stdout.write("  Opción no válida.\n");
+        fail("Opción no válida.");
     }
   }
 }
 
 main()
   .catch((error: unknown) => {
-    stdout.write(`\nError inesperado: ${messageOf(error)}\n`);
+    stdout.write(`\n${paint(`Error inesperado: ${messageOf(error)}`, "red")}\n`);
     process.exitCode = 1;
   })
   .finally(() => {

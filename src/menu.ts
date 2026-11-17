@@ -21,6 +21,7 @@ export function renderMenu(config: Config): string {
     "  3. Buscar y agregar ciudad",
     "  4. Eliminar ciudad",
     "  5. Establecer ciudad default",
+    "  6. Pronóstico 7 días (todas las ciudades)",
     `  8. Ajustes (${formatUnitLabel(config.unit)})`,
     "  9. Salir",
     LINE,
