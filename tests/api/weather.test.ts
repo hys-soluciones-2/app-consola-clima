@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import type { City } from "../types/City.ts";
-import { WeatherError } from "./client.ts";
-import { fetchWeeklyForecast } from "./weather.ts";
+import type { City } from "../../src/types/City.ts";
+import { WeatherError } from "../../src/api/client.ts";
+import { fetchCurrentWeather, fetchWeeklyForecast } from "../../src/api/weather.ts";
 
 const realFetch = globalThis.fetch;
 const city: City = { id: "1", name: "Ottawa", latitude: 45.41, longitude: -75.69 };
@@ -19,6 +19,22 @@ const dailyPayload = {
     temperature_2m_min: [4.1, 2.2],
     weather_code: [0, 61],
     precipitation_probability_max: [10, 70],
+  },
+};
+
+const currentPayload = {
+  current_units: {
+    temperature_2m: "°C",
+    wind_speed_10m: "km/h",
+    relative_humidity_2m: "%",
+  },
+  current: {
+    time: "2026-11-14T23:00",
+    temperature_2m: 12.3,
+    apparent_temperature: 10.1,
+    relative_humidity_2m: 55,
+    weather_code: 3,
+    wind_speed_10m: 7.2,
   },
 };
 
@@ -45,6 +61,78 @@ async function expectWeatherError(promise: Promise<unknown>, message: string): P
 
 afterEach(() => {
   globalThis.fetch = realFetch;
+});
+
+describe("fetchCurrentWeather", () => {
+  it("pide clima actual con zona automática y sin parámetros de unidad en Celsius", async () => {
+    stubFetch(JSON.stringify(currentPayload));
+    await fetchCurrentWeather(city, "celsius");
+
+    expect(requestedUrl.pathname).toBe("/v1/forecast");
+    expect(requestedUrl.searchParams.get("latitude")).toBe("45.41");
+    expect(requestedUrl.searchParams.get("longitude")).toBe("-75.69");
+    expect(requestedUrl.searchParams.get("current")).toBe(
+      "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m",
+    );
+    expect(requestedUrl.searchParams.get("timezone")).toBe("auto");
+    expect(requestedUrl.searchParams.get("temperature_unit")).toBeNull();
+    expect(requestedUrl.searchParams.get("wind_speed_unit")).toBeNull();
+  });
+
+  it("pide Fahrenheit y mph cuando la unidad configurada es fahrenheit", async () => {
+    stubFetch(JSON.stringify(currentPayload));
+    await fetchCurrentWeather(city, "fahrenheit");
+
+    expect(requestedUrl.searchParams.get("temperature_unit")).toBe("fahrenheit");
+    expect(requestedUrl.searchParams.get("wind_speed_unit")).toBe("mph");
+  });
+
+  it("normaliza la respuesta actual y usa unidades/fallbacks", async () => {
+    stubFetch(
+      JSON.stringify({
+        current_units: { temperature_2m: "°F", wind_speed_10m: "mph", relative_humidity_2m: "%" },
+        current: { time: "2026-11-14T23:00", temperature_2m: 54.1, weather_code: 2 },
+      }),
+    );
+    const result = await fetchCurrentWeather(city, "fahrenheit");
+
+    expect(result).toEqual({
+      temperature: 54.1,
+      apparentTemperature: 54.1,
+      humidity: 0,
+      weatherCode: 2,
+      windSpeed: 0,
+      temperatureUnit: "°F",
+      windUnit: "mph",
+      humidityUnit: "%",
+      observedAt: "2026-11-14T23:00",
+    });
+  });
+
+  it("usa unidades por defecto cuando faltan metadatos", async () => {
+    stubFetch(JSON.stringify({ current: { temperature_2m: 1 } }));
+    const celsius = await fetchCurrentWeather(city, "celsius");
+    expect(celsius.temperatureUnit).toBe("°C");
+    expect(celsius.windUnit).toBe("km/h");
+    expect(celsius.observedAt).toBe("");
+
+    stubFetch(JSON.stringify({ current: { temperature_2m: 33.8 } }));
+    const fahrenheit = await fetchCurrentWeather(city, "fahrenheit");
+    expect(fahrenheit.temperatureUnit).toBe("°F");
+    expect(fahrenheit.windUnit).toBe("mp/h");
+  });
+
+  it("reporta WeatherError si no hay temperatura actual", async () => {
+    stubFetch(JSON.stringify({ current: { weather_code: 1 } }));
+    await expectWeatherError(fetchCurrentWeather(city, "celsius"), "temperatura actual");
+  });
+
+  it("propaga errores HTTP y JSON inválido", async () => {
+    stubFetch("falló", 503);
+    await expectWeatherError(fetchCurrentWeather(city, "celsius"), "Open-Meteo respondió 503");
+    stubFetch("no es json");
+    await expectWeatherError(fetchCurrentWeather(city, "celsius"), "no es un JSON válido");
+  });
 });
 
 describe("fetchWeeklyForecast", () => {

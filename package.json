@@ -5,9 +5,11 @@
   "private": true,
   "scripts": {
     "typecheck": "bun check",
-    "build": "bun build --compile --outfile dist/weather src/index.ts",
-    "start":"bun run src/index.ts",
-    "dev":"bun run src/index.ts --watch"
+    "test": "bun test",
+    "build:binary": "bun build --compile --outfile dist/weather src/index.ts",
+    "build": "bun run test && bun run build:binary",
+    "start": "bun run src/index.ts",
+    "dev": "bun run src/index.ts --watch"
   },
   "devDependencies": {
     "@types/bun": "latest"
