@@ -1,38 +1,8 @@
-import { paint } from "./color.ts";
-import type { City, Unit } from "./config.ts";
-import type { CurrentWeather, WeeklyForecast } from "./openmeteo.ts";
-
-/** Códigos WMO que devuelve Open-Meteo. */
-const WEATHER_CODES: Record<number, string> = {
-  0: "Despejado",
-  1: "Mayormente despejado",
-  2: "Parcialmente nublado",
-  3: "Nublado",
-  45: "Niebla",
-  48: "Niebla con escarcha",
-  51: "Llovizna ligera",
-  53: "Llovizna moderada",
-  55: "Llovizna densa",
-  56: "Llovizna helada ligera",
-  57: "Llovizna helada densa",
-  61: "Lluvia ligera",
-  63: "Lluvia moderada",
-  65: "Lluvia fuerte",
-  66: "Lluvia helada ligera",
-  67: "Lluvia helada fuerte",
-  71: "Nieve ligera",
-  73: "Nieve moderada",
-  75: "Nieve fuerte",
-  77: "Granos de nieve",
-  80: "Chubascos ligeros",
-  81: "Chubascos moderados",
-  82: "Chubascos fuertes",
-  85: "Chubascos de nieve ligeros",
-  86: "Chubascos de nieve fuertes",
-  95: "Tormenta",
-  96: "Tormenta con granizo ligero",
-  99: "Tormenta con granizo fuerte",
-};
+import { WEATHER_CODES, WEEKDAYS } from "./constants.ts";
+import { paint } from "./colors.ts";
+import type { City } from "../types/City.ts";
+import type { Unit } from "../types/Config.ts";
+import type { CurrentWeather, WeeklyForecast } from "../types/Weather.ts";
 
 export function describeWeather(code: number): string {
   return WEATHER_CODES[code] ?? "Condición desconocida";
@@ -83,8 +53,6 @@ export function formatCurrentWeather(weather: CurrentWeather): string {
     `  ${details.join(" · ")}`,
   ].join("\n");
 }
-
-const WEEKDAYS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"] as const;
 
 /** "2026-11-18" -> "mié 18/11" (se parsea como fecha local para no correr el día). */
 export function formatForecastDate(iso: string): string {

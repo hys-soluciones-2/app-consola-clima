@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import type { City } from "./config.ts";
-import { fetchWeeklyForecast, WeatherError } from "./openmeteo.ts";
+import type { City } from "../types/City.ts";
+import { WeatherError } from "./client.ts";
+import { fetchWeeklyForecast } from "./weather.ts";
 
 const realFetch = globalThis.fetch;
 const city: City = { id: "1", name: "Ottawa", latitude: 45.41, longitude: -75.69 };

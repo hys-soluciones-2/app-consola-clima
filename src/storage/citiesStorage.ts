@@ -1,33 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-
-export type Unit = "celsius" | "fahrenheit";
-
-export type City = {
-  id: string;
-  name: string;
-  admin1?: string;
-  country?: string;
-  latitude: number;
-  longitude: number;
-};
-
-export type Config = {
-  version: 1;
-  unit: Unit;
-  defaultCityId: string | null;
-  cities: City[];
-};
-
-export type LoadResult = {
-  config: Config;
-  /** true si el archivo existía pero no se pudo interpretar */
-  recovered: boolean;
-};
-
-export const CONFIG_DIR = join(homedir(), ".weather-cli");
-export const CONFIG_PATH = join(CONFIG_DIR, "config.json");
+import { dirname } from "node:path";
+import type { City } from "../types/City.ts";
+import type { Config, LoadResult } from "../types/Config.ts";
+import { CONFIG_PATH } from "../utils/constants.ts";
 
 export function createDefaultConfig(): Config {
   return { version: 1, unit: "celsius", defaultCityId: null, cities: [] };
@@ -54,7 +29,7 @@ export function normalizeConfig(raw: unknown): Config {
   if (!isRecord(raw)) return createDefaultConfig();
 
   const cities = Array.isArray(raw.cities) ? raw.cities.filter(isCity) : [];
-  const unit: Unit = raw.unit === "fahrenheit" ? "fahrenheit" : "celsius";
+  const unit = raw.unit === "fahrenheit" ? "fahrenheit" : "celsius";
   const requested = typeof raw.defaultCityId === "string" ? raw.defaultCityId : null;
   const defaultCityId =
     requested !== null && cities.some((city) => city.id === requested)
@@ -114,13 +89,4 @@ export function removeCity(config: Config, id: string): Config {
   const defaultCityId =
     config.defaultCityId === id ? (cities[0]?.id ?? null) : config.defaultCityId;
   return { ...config, cities, defaultCityId };
-}
-
-export function setDefaultCity(config: Config, id: string): Config {
-  if (!config.cities.some((city) => city.id === id)) return config;
-  return { ...config, defaultCityId: id };
-}
-
-export function toggleUnit(config: Config): Config {
-  return { ...config, unit: config.unit === "celsius" ? "fahrenheit" : "celsius" };
 }

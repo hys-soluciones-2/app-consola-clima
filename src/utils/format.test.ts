@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { describeWeather, formatDailyForecast, formatForecastDate } from "./format.ts";
-import type { WeeklyForecast } from "./openmeteo.ts";
+import type { WeeklyForecast } from "../types/Weather.ts";
 
 delete process.env.FORCE_COLOR;
 process.env.NO_COLOR = "1";
